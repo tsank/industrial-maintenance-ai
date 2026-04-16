@@ -1,6 +1,8 @@
 # compressor-agenticrag
 
-An agentic RAG system built over the Atlas Copco GA5 compressor manual (Doc No. 2920 1461 03) using LangChain and LangGraph. The system classifies each incoming query and routes it to the most appropriate retrieval tool, rather than applying a fixed pipeline to every query.
+> This repository is part of the [Industrial Maintenance AI](https://github.com/tsank/industrial-maintenance-ai) architectural progression.
+
+v3 of the Industrial Maintenance AI architectural progression — Agentic RAG with conditional routing over the Atlas Copco GA5 compressor manual.
 
 ## What this project demonstrates
 
@@ -61,6 +63,15 @@ compressor-agenticrag/
 └── README.md
 ```
 
+## Where this fits in the progression
+
+| Version | Capability |
+|---|---|
+| v1 | Vector RAG — semantic search over manual |
+| v2 | Graph RAG — knowledge graph + vector |
+| v2.5 | Semantic chunking — better graph quality |
+| **v3** | **Agentic routing — classify and route to right retriever** |
+
 ## Prerequisites
 
 - Python 3.10+
@@ -110,6 +121,11 @@ Results: 5/5 passed, 0/5 failed
 | 4 | how do I modify the unloading pressure setting | vector | PASS |
 | 5 | how does automatic restart after voltage failure work | vector | PASS |
 
-## Data source
+## Data Source
 
 Atlas Copco GA5 User Manual, Doc No. 2920 1461 03. Retrieved from [ManualsLib](https://www.manualslib.com) for educational purposes.
+
+## Attribution
+
+Built as v3 of the [Industrial Maintenance AI](https://github.com/tsank/industrial-maintenance-ai) architectural progression.
+Developed with assistance from Claude (Anthropic).
