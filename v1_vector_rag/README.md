@@ -4,7 +4,14 @@
 
 A production-grade Retrieval-Augmented Generation (RAG) system for industrial equipment manuals.
 
-Built as v1 of the Industrial Maintenance AI architectural progression.
+## Where this fits in the progression
+
+| Version | Capability |
+|---|---|
+| **v1** | **Vector RAG — semantic search over manual** |
+| v2 | Graph RAG — knowledge graph + vector |
+| v3 | Agentic RAG — classify and route to right retriever |
+| v4 | Multi-Store RAG — PostgreSQL, ChromaDB, NetworkX, hybrid paths |
 
 ## What it does
 
@@ -92,10 +99,15 @@ python src/app.py
 - Do not commit proprietary or confidential manuals to this repository.
 - If `.env` is not loaded automatically, verify the `load_dotenv` path in `src/chain.py` and `src/ingest.py`.
 
-## Document source
+## Data source
 
 The sample manual used for development and testing is the Atlas Copco GA5 User Manual (Document No. 2920 1461 03), sourced from ManualsLib: https://www.manualslib.com/manual/1234567/Atlas-Copco-Ga5.html
 
 This document is used strictly for educational and research purposes. It is excluded from this repository via .gitignore (`docs/` and `*.pdf`).
 
 To use this system with your own manuals, place any PDF in the `docs/` folder and run `python src/ingest.py`. **Do not commit proprietary or confidential documents to this repository.**
+
+## Attribution
+
+Built as v1 of the [Industrial Maintenance AI](https://github.com/tsank/industrial-maintenance-ai) architectural progression.
+Developed with assistance from Claude (Anthropic).
