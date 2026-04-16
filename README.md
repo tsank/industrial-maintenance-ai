@@ -60,13 +60,13 @@ stored in ChromaDB. Queries were matched against stored chunks by cosine similar
 - Garbled text detection — `is_garbled()`, `(cid:)` detection, `is_menu_diagram()` filters
 - ChromaDB as a vector store — HTTP client, collections, embeddings
 
-### Technial decisions
+### Technical decisions
 - The embedding model used at ingest time must match the model used at query time
 - PDF extraction quality varies by page — a cascade of strategies handles different failure modes
 - Fixed-size chunking splits semantic units arbitrarily — a chunk boundary mid-procedure
   produces two incomplete, poorly retrievable chunks
 
-### Why it wasn't enough
+### Limitation that motivated the next version
 Vector search retrieves semantically similar text but has no concept of relationships
 between entities. "What components connect to the air filter?" returns chunks that mention
 air filters — not a structured answer about which components are actually connected.
@@ -85,7 +85,7 @@ and `GPT-4o-mini` for triple extraction. Each triple — subject, predicate, obj
 a directed edge in a NetworkX DiGraph. A LangGraph 2-node pipeline combined vector
 retrieval with graph traversal.
 
-### Architectural Concepts
+### Architectural concepts
 - Knowledge graphs as a retrieval store — relationships as first-class data structures
 - Triple extraction — LLM-based (subject, predicate, object) extraction from text
 - NetworkX DiGraph — directed graph with successor/predecessor traversal
@@ -96,7 +96,7 @@ retrieval with graph traversal.
 - Triple extraction quality depends on input quality — mixed-content pages produce noisy triples
 - Nodes do work; routing functions navigate — keep them strictly separate
 
-### Why it wasn't enough
+### Limitation that motivated the next version
 Triple extraction operated on whole pages — semantically mixed content. A page about oil
 maintenance might contain specifications, warnings, and procedures — the extractor
 produced a jumbled mix of triples. Better chunking was needed before extraction.
@@ -124,7 +124,7 @@ with splits at the 25th percentile of similarity scores.
 - The graph grew from 1004 nodes / 387 edges to 1391 nodes / 686 edges after
   switching to semantic chunking
 
-### Why it wasn't enough
+### Limitation that motivated the next version
 Even with better chunking, the system used a fixed retrieval strategy — always vector
 search, or always vector + graph. Different questions need different strategies.
 "What is the shutdown temperature?" doesn't benefit from graph traversal.
@@ -153,7 +153,7 @@ based on query type. Conditional edges replaced the linear pipeline.
 - `StateGraph(AgentState)` takes the TypedDict class as a blueprint, not an instance
 - Module-level client initialisation — expensive operations happen once at import time
 
-### Why it wasn't enough
+### Limitation that motivated the next version
 Spec retrieval used a JSON file populated by LLM extraction — probabilistic and
 unverified for safety-critical values. More critically, some questions genuinely require
 two stores simultaneously. No routing strategy can route a hybrid question to a single
