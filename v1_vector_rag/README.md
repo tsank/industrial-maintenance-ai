@@ -1,8 +1,10 @@
 # Maintenance RAG
 
+> This repository is part of the [Industrial Maintenance AI](https://github.com/tsank/industrial-maintenance-ai) architectural progression.
+
 A production-grade Retrieval-Augmented Generation (RAG) system for industrial equipment manuals.
 
-Built as Problem 1 of a four-problem LangChain/LangGraph learning progression.
+Built as v1 of the Industrial Maintenance AI architectural progression.
 
 ## What it does
 
