@@ -1,12 +1,14 @@
 # Compressor GraphRAG
 
-A LangChain/LangGraph learning project focused on industrial AI applications — Problems 2 and 2.5 in a four-problem progression.
+> This repository is part of the [Industrial Maintenance AI](https://github.com/tsank/industrial-maintenance-ai) architectural progression.
+
+v2 and v2.5 of the Industrial Maintenance AI architectural progression — GraphRAG and semantic chunking over the Atlas Copco GA5 compressor manual.
 
 ## Overview
 
 A GraphRAG system over the Atlas Copco GA5 compressor manual. Extracts entities and relationships into a knowledge graph, combines graph traversal with vector retrieval, and compares answer quality against [maintenance-rag](https://github.com/tsank/maintenance-rag) (basic RAG).
 
-Problem 2.5 introduced semantic chunking — replacing fixed-size chunking with embedding-based sentence similarity splitting. Both ChromaDB and the graph builder now consume the same 136 semantic chunks, making the architecture fully unified.
+v2.5 introduced semantic chunking — replacing fixed-size chunking with embedding-based sentence similarity splitting. Both ChromaDB and the graph builder now consume the same 136 semantic chunks, making the architecture fully unified.
 
 ## Architecture
 ```
@@ -101,7 +103,7 @@ python main.py
 
 ## Knowledge Graph Stats
 
-| Metric | Problem 2 (fixed/page-level) | Problem 2.5 (semantic chunks) |
+| Metric | v2 (fixed/page-level)         | v2.5 (semantic chunks)        |
 |--------|-------------------------------|-------------------------------|
 | Input to graph builder | 49 pages | 136 semantic chunks |
 | Total nodes | 1004 | 1391 |
@@ -119,9 +121,9 @@ python main.py
 
 **Generation** — A LangGraph 2-node pipeline passes the merged context to GPT-4o for answer generation.
 
-## Comparison Across Problems
+## Comparison Across Versions
 
-| Aspect | Problem 1 — Basic RAG | Problem 2 — GraphRAG | Problem 2.5 — Semantic GraphRAG |
+| Aspect | v1 — Vector RAG      | v2 — Graph RAG       | v2.5 — Semantic Graph RAG        |
 |--------|----------------------|----------------------|----------------------------------|
 | Chunking | Fixed (802 chunks) | Page-level (49 pages) | Semantic (136 chunks) |
 | Vector store | 802 fixed chunks | 802 fixed chunks | 136 semantic chunks |
@@ -131,7 +133,7 @@ python main.py
 | Retrieval | Vector only | Vector + graph | Vector + graph (unified) |
 | Architecture | Simple | Misaligned | Fully unified |
 
-## Key Learnings
+## Technical Decisions
 
 - **Semantic chunking** groups sentences by meaning rather than character count — better retrieval context at lower chunk count
 - **Unified architecture** matters: both ChromaDB and the graph builder should consume the same chunks for consistency
@@ -151,7 +153,7 @@ python main.py
 
 ## Related
 
-- [maintenance-rag — Basic RAG (Problem 1)](https://github.com/tsank/maintenance-rag)
+- [maintenance-rag — v1 Vector RAG](https://github.com/tsank/maintenance-rag)
 
 ## Data Source
 
@@ -160,5 +162,5 @@ https://www.manualslib.com/manual/1234567/Atlas-Copco-Ga5.html
 
 ## Attribution
 
-Built as part of a self-directed LangChain/LangGraph learning progression focused on industrial AI applications.
+Built as v2 and v2.5 of the [Industrial Maintenance AI](https://github.com/tsank/industrial-maintenance-ai) architectural progression.
 Developed with assistance from Claude (Anthropic).
