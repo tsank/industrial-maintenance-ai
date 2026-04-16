@@ -1,0 +1,10 @@
+.env
+__pycache__/
+*.pyc
+.pytest_cache/
+*.egg-info/
+dist/
+.DS_Store
+data/graph.json
+docs/*.pdf
+*/docs/*.pdf
