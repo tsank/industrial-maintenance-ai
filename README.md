@@ -339,8 +339,3 @@ Detailed setup instructions are in each version's `README.md`.
 When a store is demonstrably insufficient — sparse graph edges, garbled OCR pages —
 re_retrieve_node switches to a different store rather than retrying the same one.
 Relation queries that fail graph traversal fall back to ChromaDB narrative search.
-
-**v4.5 — LLM Extraction with Guardrails**
-Replace manually verified seed CSVs with an automated extraction pipeline from the PDF.
-Introduce guardrails: Pydantic structured output, range validation, cross-extraction
-consistency checks, and LLM-as-judge verification.
