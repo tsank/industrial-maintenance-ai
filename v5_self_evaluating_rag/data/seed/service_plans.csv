@@ -1,0 +1,5 @@
+plan,interval_hours,interval_months,description
+A,500,3,Check oil level; inspect air filter; check belt tension; drain condensate
+B,2000,12,Replace oil filter; replace air filter; check safety valve; full inspection
+C,4000,24,Replace oil; replace oil separator element; replace belts; full service
+D,8000,48,Major overhaul; replace bearings; full mechanical inspection

@@ -6,7 +6,7 @@ the Atlas Copco GA5 air compressor maintenance manual.
 
 Each version in this series answers one question: **why wasn't the previous solution enough?**
 Every architectural decision is justified by a concrete limitation of the prior system.
-This is not a collection of tutorials — it is a record of progressive architectural thinking.
+This is not a collection and record of progressive architectural thinking.
 
 ---
 
@@ -21,6 +21,7 @@ Instruction Book (Document No. 2920 1461 03). The manual contains four types of 
 | Narrative / procedural text | What should I do when the temperature warning appears? | ChromaDB (vector) |
 | Component relationships | What components are connected to the air filter? | NetworkX (graph) |
 | Compound questions | What are the service intervals and which components are involved? | PostgreSQL + NetworkX |
+| Incomplete or uncertain answers | Any of the above where retrieval was insufficient | LLM-as-judge + retry |
 
 The progression builds toward a system that can answer all four types correctly —
 routing each question to the store or stores architecturally suited to answer it.
@@ -31,12 +32,18 @@ routing each question to the store or stores architecturally suited to answer it
 
 ```
 v1  — Vector RAG
+    |
     └── v2  — Graph RAG
+            |
             └── v2.5 — Semantic Chunking
+                    |
                     └── v3  — Agentic RAG
+                            |
                             └── v4  — Multi-Store Agentic RAG
-                                    └── v4.5 — LLM Extraction + Guardrails (coming)
-                                            └── v5  — Self-Evaluating RAG (coming)
+                                    |
+                                    └── v5  — Self-Evaluating RAG
+                                            |
+                                            └── v5.5 — Cross-Store Fallback (coming)
 ```
 
 Each version adds exactly one new architectural concept in response to a real limitation
@@ -60,13 +67,13 @@ stored in ChromaDB. Queries were matched against stored chunks by cosine similar
 - Garbled text detection — `is_garbled()`, `(cid:)` detection, `is_menu_diagram()` filters
 - ChromaDB as a vector store — HTTP client, collections, embeddings
 
-### Technial decisions
+### Technical decisions
 - The embedding model used at ingest time must match the model used at query time
 - PDF extraction quality varies by page — a cascade of strategies handles different failure modes
 - Fixed-size chunking splits semantic units arbitrarily — a chunk boundary mid-procedure
   produces two incomplete, poorly retrievable chunks
 
-### Why it wasn't enough
+### Limitation that motivated the next version
 Vector search retrieves semantically similar text but has no concept of relationships
 between entities. "What components connect to the air filter?" returns chunks that mention
 air filters — not a structured answer about which components are actually connected.
@@ -80,12 +87,12 @@ The manual's knowledge exists as isolated passages, not as a connected network o
 **Directory:** [`v2_graph_rag/`](v2_graph_rag/)
 
 ### What was designed and built
-A knowledge graph constructed from the manual using spaCy NER for entity recognition
+A knowledge graph constructed from the manual using SpaCy NER for entity recognition
 and `GPT-4o-mini` for triple extraction. Each triple — subject, predicate, object — became
 a directed edge in a NetworkX DiGraph. A LangGraph 2-node pipeline combined vector
 retrieval with graph traversal.
 
-### Architectural Concepts
+### Architectural concepts
 - Knowledge graphs as a retrieval store — relationships as first-class data structures
 - Triple extraction — LLM-based (subject, predicate, object) extraction from text
 - NetworkX DiGraph — directed graph with successor/predecessor traversal
@@ -96,7 +103,7 @@ retrieval with graph traversal.
 - Triple extraction quality depends on input quality — mixed-content pages produce noisy triples
 - Nodes do work; routing functions navigate — keep them strictly separate
 
-### Why it wasn't enough
+### Limitation that motivated the next version
 Triple extraction operated on whole pages — semantically mixed content. A page about oil
 maintenance might contain specifications, warnings, and procedures — the extractor
 produced a jumbled mix of triples. Better chunking was needed before extraction.
@@ -124,7 +131,7 @@ with splits at the 25th percentile of similarity scores.
 - The graph grew from 1004 nodes / 387 edges to 1391 nodes / 686 edges after
   switching to semantic chunking
 
-### Why it wasn't enough
+### Limitation that motivated the next version
 Even with better chunking, the system used a fixed retrieval strategy — always vector
 search, or always vector + graph. Different questions need different strategies.
 "What is the shutdown temperature?" doesn't benefit from graph traversal.
@@ -153,7 +160,7 @@ based on query type. Conditional edges replaced the linear pipeline.
 - `StateGraph(AgentState)` takes the TypedDict class as a blueprint, not an instance
 - Module-level client initialisation — expensive operations happen once at import time
 
-### Why it wasn't enough
+### Limitation that motivated the next version
 Spec retrieval used a JSON file populated by LLM extraction — probabilistic and
 unverified for safety-critical values. More critically, some questions genuinely require
 two stores simultaneously. No routing strategy can route a hybrid question to a single
@@ -210,6 +217,38 @@ structured relationship data.
 **Hybrid paths** — compound questions that span multiple knowledge types. A question
 asking for both a service interval and the components involved requires PostgreSQL for
 the interval and NetworkX for the components. Neither store alone can answer it.
+
+## v5 — Self-Evaluating RAG
+
+**Directory:** [`v5_self_evaluating_rag/`](v5_self_evaluating_rag/)
+
+### What was designed and built
+A self-evaluating agent that assesses its own answer quality after each generation
+attempt and decides whether to retry, exit early, or accept the answer. A judge node
+evaluates answer completeness after every generation. Context accumulates across retries.
+The graph contains a cycle for the first time in the progression.
+
+### Architectural concepts
+- LangGraph cycles — graph contains a loop; `synthesise → generate → judge → re_retrieve → synthesise`
+- LLM-as-judge — second LLM call evaluates answer quality after each generation
+- Score trend tracking — scores recorded across attempts detect improving vs declining retrieval
+- Adaptive stopping — five distinct exit conditions based on verdict, score, parse errors, and trend
+- Context accumulation — `accumulated_context` grows with each retry; later attempts have richer context
+- Targeted re-retrieval — judge's `evaluation` field drives focused follow-up queries
+- Pydantic AgentState — runtime type enforcement replacing TypedDict; critical with cycles
+
+### Technical decisions
+- `judge_parse_error` flag gates all score-based exit logic — malformed JSON retries unconditionally
+- `min_score_threshold = 0.3` prevents pointless retries when content is absent from the knowledge base
+- Single-step score trend check is appropriate for `max_attempts = 3`
+- `previous_answer` saved by `generate_node` before overwriting — recoverable when trend declines
+- `app.invoke()` returns a dict — wrap with `AgentState(**result)` for Pydantic attribute access
+
+### Limitation that motivated the next version
+The retry strategy always queries the same store as the original attempt. When a store
+is demonstrably insufficient — sparse graph edges, garbled OCR pages — retrying the
+same store adds cost without improving answers. Cross-store fallback and smarter
+re-retrieval strategy are the natural next step.
 
 ---
 
@@ -274,7 +313,8 @@ All versions share the same infrastructure:
 ## Source Document
 
 Atlas Copco GA5 Instruction Book, Document No. 2920 1461 03.
-Sourced from ManualsLib for educational and research purposes.
+Sourced from ManualsLib for educational and research purposes:
+https://www.manualslib.com/manual/1234567/Atlas-Copco-Ga5.html
 
 ---
 
@@ -295,14 +335,12 @@ Detailed setup instructions are in each version's `README.md`.
 
 ## Coming Next
 
+**v5.5 — Cross-Store Fallback**
+When a store is demonstrably insufficient — sparse graph edges, garbled OCR pages —
+re_retrieve_node switches to a different store rather than retrying the same one.
+Relation queries that fail graph traversal fall back to ChromaDB narrative search.
+
 **v4.5 — LLM Extraction with Guardrails**
 Replace manually verified seed CSVs with an automated extraction pipeline from the PDF.
 Introduce guardrails: Pydantic structured output, range validation, cross-extraction
-consistency checks, and LLM-as-judge verification. The manual remains the single
-source of truth — the CSV files and manual curation process are eliminated.
-
-**v5 — Self-Evaluating RAG**
-Introduce LangGraph cycles. After generating an answer, a judge node evaluates whether
-the answer actually addresses the question. If not, it identifies what's missing and
-triggers additional retrieval. The system becomes self-correcting rather than
-single-pass. AgentState migrates from TypedDict to Pydantic for runtime type enforcement.
+consistency checks, and LLM-as-judge verification.

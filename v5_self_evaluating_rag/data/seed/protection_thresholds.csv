@@ -1,0 +1,8 @@
+parameter,level,value,unit
+high_temperature,warning,110,°C
+high_temperature,shutdown,120,°C
+high_pressure,warning,8.0,bar
+high_pressure,shutdown,9.0,bar
+low_oil_pressure,warning,1.5,bar
+low_oil_pressure,shutdown,1.2,bar
+motor_overload,shutdown,1.0,relative
