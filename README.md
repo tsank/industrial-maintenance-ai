@@ -6,7 +6,7 @@ the Atlas Copco GA5 air compressor maintenance manual.
 
 Each version in this series answers one question: **why wasn't the previous solution enough?**
 Every architectural decision is justified by a concrete limitation of the prior system.
-This is not a collection and record of progressive architectural thinking.
+This is a record of progressive architectural thinking.
 
 ---
 
@@ -43,7 +43,7 @@ v1  — Vector RAG
                                     |
                                     └── v5  — Self-Evaluating RAG
                                             |
-                                            └── v5.5 — Cross-Store Fallback (coming)
+                                            └── v5.5 — Cross-Store Fallback and Smarter Graph Retrieval
 ```
 
 Each version adds exactly one new architectural concept in response to a real limitation
@@ -218,6 +218,8 @@ structured relationship data.
 asking for both a service interval and the components involved requires PostgreSQL for
 the interval and NetworkX for the components. Neither store alone can answer it.
 
+---
+
 ## v5 — Self-Evaluating RAG
 
 **Directory:** [`v5_self_evaluating_rag/`](v5_self_evaluating_rag/)
@@ -249,6 +251,45 @@ The retry strategy always queries the same store as the original attempt. When a
 is demonstrably insufficient — sparse graph edges, garbled OCR pages — retrying the
 same store adds cost without improving answers. Cross-store fallback and smarter
 re-retrieval strategy are the natural next step.
+
+---
+
+## v5.5 — Cross-Store Fallback and Smarter Graph Retrieval
+
+**Directory:** [`v5_5_cross_store_rag/`](v5_5_cross_store_rag/)
+
+### What was designed and built
+Two targeted improvements to the retrieval and retry strategy. First, hybrid graph node
+matching combines substring matching with semantic similarity using pre-computed node
+embeddings — finding semantically related nodes that exact phrase matching misses.
+Second, cross-store fallback routes retries to the most appropriate store based on the
+judge's evaluation of what is missing, rather than always retrying the same store.
+
+### Architectural concepts
+- Pre-computed node embeddings — 1391 node labels embedded once at setup, loaded as
+  NumPy matrix at import time; no embedding API calls per query
+- Hybrid node matching — substring precision union semantic recall, capped at 5 seed nodes
+- Vectorised cosine similarity — NumPy matrix operations over all nodes simultaneously
+- Cross-store fallback — LLM reads judge evaluation and selects best store for retry
+- Store capability prompting — explicit store descriptions guide LLM routing decision
+
+### Technical decisions
+- `embed_documents()` for batch embedding at setup; `embed_query()` for single query
+- NumPy matrix `(1391, 1536)` loaded at import — no per-query conversion overhead
+- `+ 1e-10` epsilon in cosine similarity denominator prevents division by zero
+- Node existence guard `if node not in _G` defensive against version mismatch
+- `fallback_store` field empty by default — distinguishes no-retry from retry clearly
+- Semantic threshold 0.6 — balances precision and recall for short noisy node labels
+
+### Limitation acknowledged but not addressed in subsequent versions
+Cross-store fallback selection by LLM is probabilistic. Improving it would require
+historical routing performance data or domain-specific fine-tuning — neither of which
+fits the single-concept progression structure. This remains an open improvement area.
+
+### Limitation that motivated the next version
+Every conversation starts from scratch. The agent has no memory of previous sessions —
+a maintenance engineer must repeat queries across conversations, and the system
+cannot learn from interaction history. Cross-session persistence is the missing capability.
 
 ---
 
@@ -335,7 +376,7 @@ Detailed setup instructions are in each version's `README.md`.
 
 ## Coming Next
 
-**v5.5 — Cross-Store Fallback**
-When a store is demonstrably insufficient — sparse graph edges, garbled OCR pages —
-re_retrieve_node switches to a different store rather than retrying the same one.
-Relation queries that fail graph traversal fall back to ChromaDB narrative search.
+**v6 — Long-term Memory and Cross-Session Persistence**
+Introduce LangGraph checkpointing for cross-session state persistence.
+The agent remembers previous queries and answers across conversations,
+building a session-aware maintenance assistant.
