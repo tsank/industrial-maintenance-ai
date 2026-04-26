@@ -44,6 +44,8 @@ v1  — Vector RAG
                                     └── v5  — Self-Evaluating RAG
                                             |
                                             └── v5.5 — Cross-Store Fallback and Smarter Graph Retrieval
+                                                    |
+                                                    └── v6  — Long-term Memory and Cross-Session Persistence
 ```
 
 Each version adds exactly one new architectural concept in response to a real limitation
@@ -281,15 +283,51 @@ judge's evaluation of what is missing, rather than always retrying the same stor
 - `fallback_store` field empty by default — distinguishes no-retry from retry clearly
 - Semantic threshold 0.6 — balances precision and recall for short noisy node labels
 
-### Limitation acknowledged but not addressed in subsequent versions
-Cross-store fallback selection by LLM is probabilistic. Improving it would require
-historical routing performance data or domain-specific fine-tuning — neither of which
-fits the single-concept progression structure. This remains an open improvement area.
-
 ### Limitation that motivated the next version
 Every conversation starts from scratch. The agent has no memory of previous sessions —
 a maintenance engineer must repeat queries across conversations, and the system
 cannot learn from interaction history. Cross-session persistence is the missing capability.
+
+---
+
+## v6 — Long-term Memory and Cross-Session Persistence
+
+**Directory:** [`v6_longterm_memory/`](v6_longterm_memory/)
+
+### What was designed and built
+A session-aware maintenance assistant with two complementary persistence mechanisms.
+LangGraph `PostgresSaver` checkpointing saves and restores the full `AgentState` across
+process boundaries, keyed by a `session_id`. An episodic memory store (`memory_episodes`
+table, pgvector similarity search) records past Q&A cycles and injects semantically
+similar past interactions as context at the start of every run.
+
+### Architectural concepts
+- LangGraph checkpointing — `PostgresSaver` serialises full `AgentState` to PostgreSQL
+  across process boundaries; three internal tables (`checkpoints`, `checkpoint_blobs`,
+  `checkpoint_writes`) provide atomic, recoverable state persistence
+- Episodic memory — structured Q&A history queryable by semantic similarity via pgvector
+- Bookend pattern — two new nodes wrap the unchanged v5.5 pipeline without modifying its internals
+- Quality gate — only episodes scoring above `min_score_threshold` are persisted; low-quality
+  answers discarded at write time rather than filtered at read time
+- Embedding reuse — query embedding computed once in `memory_retrieval_node`, stored on
+  `AgentState`, reused in `memory_storage_node` — eliminates redundant API call and
+  guarantees embedding consistency within a single run
+
+### Technical decisions
+- `PostgresSaver` requires `psycopg3` (`psycopg[binary]`) — separate from `psycopg2`
+  used by application retrieval nodes
+- `session_id` on `AgentState` and `thread_id` in LangGraph config always set to same value
+- `ivfflat` index omitted from `memory_episodes` — requires minimum row count to build lists;
+  sequential scan correct at this scale
+- `MemoryEntry.embedding` excluded from Pydantic model — embeddings passed separately
+  to keep in-memory state lightweight
+- `checkpointer.setup()` idempotent — safe to call on every module load
+
+### Limitation that motivated the next version
+v6 adds memory but has no visibility into what happened during a run. There is no trace
+of which nodes fired, how long each took, what prompts were sent to the LLMs, or why
+the judge scored an answer a particular way. Debugging requires adding print statements
+and re-running. Observability is the missing capability.
 
 ---
 
@@ -342,7 +380,7 @@ All versions share the same infrastructure:
 - **ChromaDB** — Docker container, `chromadb/chroma:0.5.23`, port 8000,
   collection `maintenance_manuals`
 - **PostgreSQL** — Docker container, `postgres:15`, port 5432, database `compressor`
-  (v4 onwards)
+  (v4–v5.5); `ankane/pgvector` image required from v6 onwards (pgvector extension)
 - **Embeddings** — `text-embedding-3-small` (OpenAI)
 - **Generation** — `gpt-4o` (OpenAI)
 - **Classification / extraction** — `gpt-4o-mini` (OpenAI)
@@ -355,7 +393,7 @@ All versions share the same infrastructure:
 
 Atlas Copco GA5 Instruction Book, Document No. 2920 1461 03.
 Sourced from ManualsLib for educational and research purposes:
-https://www.manualslib.com/manual/1234567/Atlas-Copco-Ga5.html
+https://www.manualslib.com/manual/1353128/Atlas-Copco-Ga5.html
 
 ---
 
@@ -376,7 +414,8 @@ Detailed setup instructions are in each version's `README.md`.
 
 ## Coming Next
 
-**v6 — Long-term Memory and Cross-Session Persistence**
-Introduce LangGraph checkpointing for cross-session state persistence.
-The agent remembers previous queries and answers across conversations,
-building a session-aware maintenance assistant.
+**v7 — Observability**
+Introduce LangSmith and/or OpenTelemetry integration. Add tracing of node execution,
+latency visibility per node, LLM call inspection (prompts and responses), and persistent
+run history for debugging. The current system has no visibility into what happens inside
+a run — debugging requires adding print statements and re-running.
