@@ -8,3 +8,4 @@ dist/
 data/graph.json
 docs/*.pdf
 */docs/*.pdf
+v1_vector_rag/docs

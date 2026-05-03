@@ -46,6 +46,8 @@ v1  — Vector RAG
                                             └── v5.5 — Cross-Store Fallback and Smarter Graph Retrieval
                                                     |
                                                     └── v6  — Long-term Memory and Cross-Session Persistence
+                                                            |
+                                                            └── v7  — Observability, Tracing, and Gradio UI
 ```
 
 Each version adds exactly one new architectural concept in response to a real limitation
@@ -172,53 +174,31 @@ store and get a complete answer.
 
 ## v4 — Multi-Store Agentic RAG
 
-**Repo:** [`compressor-multistorerag`](https://github.com/tsank/compressor-multistorerag)
 **Directory:** [`v4_multistore_rag/`](v4_multistore_rag/)
 
 ### What was designed and built
-A four-store retrieval system: PostgreSQL for structured tabular data (Text-to-SQL),
-ChromaDB for narrative and procedural text (vector search), NetworkX for component
-relationships (graph traversal), and hybrid retrieval paths that call two stores for
-compound questions. A synthesis node merges multiple context fields before generation.
+A verified relational store replaced LLM-extracted JSON for spec retrieval. Four PostgreSQL
+tables hold the compressor's operational parameters, pressure settings, service plans, and
+protection thresholds — seeded from authoritative CSV files. A Text-to-SQL retrieval node
+generates and executes SQL against these tables. Hybrid retrieval combines SQL results with
+graph context for compound questions.
 
 ### Architectural concepts
-- Text-to-SQL — schema-aware prompting generates SQL from natural language
-- Hybrid retrieval — some questions require two stores; no single store can answer them
-- `_extract_sql_question()` — strips non-SQL parts before SQL generation to prevent
-  the LLM from generating incorrect joins across unrelated tables
-- Synthesis node — merges populated context fields with labelled section headers
-- Sentinel filtering — empty retrieval signals excluded before generation
-- Verified seed data — safety-critical structured values loaded from human-verified CSVs
+- Text-to-SQL retrieval — LLM generates SQL; database executes it; results are authoritative
+- Schema prompting — explicit table definitions in the prompt constrain SQL generation
+- Hybrid retrieval path — combines two stores in a single retrieval step
+- Sentinel filtering — distinguishes empty results from genuine answers
 
 ### Technical decisions
-- Metadata filtering in ChromaDB only works if metadata was written at ingest time —
-  retrieval capabilities are constrained by ingestion decisions
-- Graph node matching direction matters — flipped node-in-query matching handles
-  multi-word node labels correctly; token-in-node produces false positives
-- Successor and predecessor directions must be preserved separately in graph output
-- `IMPORTANT: Always use SELECT *` in the SQL prompt prevents the LLM from
-  discarding column names that give values their meaning
-- Debugging RAG systems requires tracing data through every stage before identifying
-  root cause — passing tests with loose assertions are not proof of correctness
+- `SELECT *` always — avoids hallucinated column names
+- `pg_conn.autocommit = True` — no transaction wrapping needed for read-only queries
+- Seed CSVs committed — retrieval correctness is verifiable against source data
+- `QUERY_TYPE_TO_STORE` mapping — explicit store assignment per query type
 
-### The four-store argument
-Four stores exist because four types of knowledge require four different access patterns:
-
-**PostgreSQL** — exact structured facts (thresholds, intervals, pressure settings).
-Semantic similarity returns approximately related content. SQL returns the exact row.
-For a shutdown temperature threshold, approximate is not acceptable.
-
-**ChromaDB** — narrative and procedural content. Step-by-step instructions exist as
-prose across multiple sentences. There is no schema that captures arbitrary step
-sequences. Vector search finds relevant passages regardless of exact wording.
-
-**NetworkX** — component relationships. Edges between entities are first-class data
-structures. SQL has no edges. Vector search returns prose about components, not
-structured relationship data.
-
-**Hybrid paths** — compound questions that span multiple knowledge types. A question
-asking for both a service interval and the components involved requires PostgreSQL for
-the interval and NetworkX for the components. Neither store alone can answer it.
+### Limitation that motivated the next version
+Every answer attempt is evaluated only at the end — if the answer is wrong, the entire
+retrieval was wasted. There is no mechanism to detect a poor answer and try again with
+a different strategy.
 
 ---
 
@@ -227,26 +207,22 @@ the interval and NetworkX for the components. Neither store alone can answer it.
 **Directory:** [`v5_self_evaluating_rag/`](v5_self_evaluating_rag/)
 
 ### What was designed and built
-A self-evaluating agent that assesses its own answer quality after each generation
-attempt and decides whether to retry, exit early, or accept the answer. A judge node
-evaluates answer completeness after every generation. Context accumulates across retries.
-The graph contains a cycle for the first time in the progression.
+An LLM-as-judge node evaluates every generated answer and scores it on a 0–1 scale.
+A conditional retry loop re-retrieves and re-generates if the score is insufficient.
+Five exit conditions prevent infinite loops: good verdict, max attempts, score below
+threshold, score declining across attempts, or judge parse error.
 
 ### Architectural concepts
-- LangGraph cycles — graph contains a loop; `synthesise → generate → judge → re_retrieve → synthesise`
-- LLM-as-judge — second LLM call evaluates answer quality after each generation
-- Score trend tracking — scores recorded across attempts detect improving vs declining retrieval
-- Adaptive stopping — five distinct exit conditions based on verdict, score, parse errors, and trend
-- Context accumulation — `accumulated_context` grows with each retry; later attempts have richer context
-- Targeted re-retrieval — judge's `evaluation` field drives focused follow-up queries
-- Pydantic AgentState — runtime type enforcement replacing TypedDict; critical with cycles
+- LLM-as-judge — a second LLM call evaluates the first; separation of generation and evaluation
+- Score trend tracking — `score_trend` list detects improving vs declining quality across retries
+- Adaptive stopping — five distinct exit conditions, each justified by a different failure mode
+- Context accumulation — each retry appends to `accumulated_context`, not replace it
 
 ### Technical decisions
-- `judge_parse_error` flag gates all score-based exit logic — malformed JSON retries unconditionally
-- `min_score_threshold = 0.3` prevents pointless retries when content is absent from the knowledge base
-- Single-step score trend check is appropriate for `max_attempts = 3`
-- `previous_answer` saved by `generate_node` before overwriting — recoverable when trend declines
-- `app.invoke()` returns a dict — wrap with `AgentState(**result)` for Pydantic attribute access
+- Pydantic `AgentState` replaces TypedDict — field-level validation, cleaner partial returns
+- `app.invoke()` returns dict — wrap with `AgentState(**result)` in tests
+- `judge_parse_error` flag — distinguishes unparseable JSON from a genuine "insufficient" verdict
+- Score trend of length ≥ 2 required before applying declining trend exit
 
 ### Limitation that motivated the next version
 The retry strategy always queries the same store as the original attempt. When a store
@@ -331,6 +307,42 @@ and re-running. Observability is the missing capability.
 
 ---
 
+## v7 — Observability, Tracing, and Gradio UI
+
+**Directory:** [`v7_observability/`](v7_observability/)
+
+### What was designed and built
+Full-stack observability over the v6 agent, plus a production-ready Gradio UI. Every
+LangGraph node is wrapped with an OpenTelemetry `@traced_node` decorator factory that
+captures execution time and node-specific diagnostic attributes. Spans are sent to Jaeger
+via OTLP. LangSmith captures all LLM calls automatically via environment variables.
+A two-tab Gradio interface separates the end-user chatbot from the operator trace dashboard.
+
+### Architectural concepts
+- OTel decorator factory — `traced_node(span_name)` wraps nodes without touching their logic
+- Child spans — helper functions open their own spans via `get_tracer()`; OTel context
+  propagation nests them automatically under the parent node span
+- LangSmith auto-instrumentation — zero instrumentation code in nodes; activated by env vars
+- Separation of concerns — `observability/` module is completely independent of node logic
+- Opt-in observability — both backends gracefully no-op when credentials are absent
+- Honest failure — system correctly reports when source document does not contain an answer,
+  rather than hallucinating plausible-sounding information
+
+### Technical decisions
+- `@functools.wraps(fn)` preserves `fn.__name__` — LangGraph uses function names during graph construction
+- `BatchSpanProcessor` buffers spans for efficient network delivery to Jaeger
+- `get_tracer()` imported lazily inside helpers — avoids circular import at module load time
+- `sql[:500]` truncation on SQL span attribute — respects OTel attribute size limits
+- `datetime.now(timezone.utc)` replaces deprecated `datetime.utcnow()` throughout
+- `docker-compose.yml` manages all three containers (ChromaDB, PostgreSQL, Jaeger) together
+
+### Limitation that motivated the next version
+The evaluation framework is manual — a human must inspect traces to assess answer quality.
+There is no automated evaluation suite that runs a fixed question set, scores answers against
+ground truth, and tracks quality over time. v8 will introduce systematic evaluation.
+
+---
+
 ## Shared Utilities
 
 **Directory:** [`shared/`](shared/)
@@ -351,9 +363,8 @@ These principles run through every version in the progression:
 A passing test with a wrong answer is more dangerous than a failing test with a clear
 error message.
 
-**Separation of concerns** — topology in `agent.py`, implementation in `pipeline.py`,
-infrastructure in `db_setup.py`, verification in `test_questions.py`. Each file has
-one job.
+**Separation of concerns** — topology in `agent.py`, implementation in node files,
+infrastructure in `clients.py`, verification in tests. Each file has one job.
 
 **Module-level initialisation** — database connections, graph loading, LLM clients are
 created once at import time and reused. Performance and predictability.
@@ -371,6 +382,10 @@ produces an answer.
 architectural concept. Complexity is never added for its own sake — only in response
 to a demonstrated limitation of the previous solution.
 
+**Observability as a first-class concern** — a system that cannot be observed cannot
+be trusted in production. Tracing, latency visibility, and LLM call inspection are
+architectural requirements, not afterthoughts.
+
 ---
 
 ## Infrastructure
@@ -381,11 +396,14 @@ All versions share the same infrastructure:
   collection `maintenance_manuals`
 - **PostgreSQL** — Docker container, `postgres:15`, port 5432, database `compressor`
   (v4–v5.5); `ankane/pgvector` image required from v6 onwards (pgvector extension)
+- **Jaeger** — Docker container, `jaegertracing/all-in-one`, port 16686 (UI), 4317 (OTLP) — v7 onwards
 - **Embeddings** — `text-embedding-3-small` (OpenAI)
 - **Generation** — `gpt-4o` (OpenAI)
 - **Classification / extraction** — `gpt-4o-mini` (OpenAI)
 - **Python** — 3.10.10, conda env `langchain-rag`
 - **Key libraries** — LangChain 0.3.7, LangGraph, NetworkX 3.x, ChromaDB, psycopg2
+
+From v7 onwards, all containers are managed together via `docker-compose.yml`.
 
 ---
 
@@ -408,14 +426,16 @@ To run any version, you will need:
 - PostgreSQL running as a Docker container on port 5432 (v4 onwards)
 - The Atlas Copco GA5 manual PDF (sourced from ManualsLib)
 
+From v7 onwards, start all containers with `docker-compose up -d`.
+
 Detailed setup instructions are in each version's `README.md`.
 
 ---
 
 ## Coming Next
 
-**v7 — Observability**
-Introduce LangSmith and/or OpenTelemetry integration. Add tracing of node execution,
-latency visibility per node, LLM call inspection (prompts and responses), and persistent
-run history for debugging. The current system has no visibility into what happens inside
-a run — debugging requires adding print statements and re-running.
+**v8 — Evaluation**
+Introduce a systematic evaluation framework. A fixed question set with ground-truth answers
+runs against the agent automatically, scores are tracked across versions, and regressions
+are detected before they reach production. The current system has no way to measure whether
+architectural changes improve or degrade answer quality.
