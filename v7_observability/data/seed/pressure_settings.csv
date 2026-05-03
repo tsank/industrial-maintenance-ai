@@ -1,0 +1,7 @@
+ga_model,icd_model,dewpoint_variant,frequency_hz,unload_pressure_bar,load_pressure_bar
+GA5,standard,none,50,7.7,6.7
+GA5,standard,none,60,7.7,6.7
+GA5,full-feature,none,50,7.7,6.7
+GA5,full-feature,none,60,7.7,6.7
+GA5,full-feature,low,50,7.7,6.7
+GA5,full-feature,low,60,7.7,6.7

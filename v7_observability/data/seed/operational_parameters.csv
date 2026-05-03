@@ -1,0 +1,9 @@
+parameter,value,unit
+maximum_working_pressure,8.6,bar
+oil_capacity,2.4,litres
+oil_type,Roto-Inject Fluid,
+ambient_temperature_min,0,°C
+ambient_temperature_max,40,°C
+motor_power,5.5,kW
+noise_level,62,dB(A)
+weight,137,kg

@@ -1,0 +1,42 @@
+services:
+
+  chromadb:
+    image: chromadb/chroma:0.5.23
+    container_name: maintenance-rag-chromadb-1
+    ports:
+      - "8000:8000"
+    volumes:
+      - maintenance-rag_chroma_data:/chroma/chroma
+    environment:
+      - ANONYMIZED_TELEMETRY=false
+    restart: unless-stopped
+
+  postgres:
+    image: ankane/pgvector
+    container_name: compressor-pg
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: compressor
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - v7_observability_postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    container_name: maintenance-rag-jaeger-1
+    ports:
+      - "16686:16686"
+      - "4317:4317"
+      - "4318:4318"
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+    restart: unless-stopped
+
+volumes:
+  maintenance-rag_chroma_data:
+    external: true
+  v7_observability_postgres_data:
+    external: true
